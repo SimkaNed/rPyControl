@@ -5,7 +5,6 @@ Finish gyems and tmotor classes create a rep
 Make a udp server in separate process
 Implement simple state machine
 
-
 Make  prototype for control routines
 	- udp/tcp server to communicate with raspberry/nucleo
 	- udp/tcp client on raspbery  
@@ -15,3 +14,23 @@ Make  prototype for control routines
 	- online plotter/printer (device)
 	- create several controllers to test (PD, Feedback Linearization, Robust, Adaptive)
 	- interpolation for the desired trajectory?
+
+
+Decide on structure of setups (abstaract class), what ae the basic components.
+	- actuators
+	- sensors 
+	- controllers 
+
+Implement following setups.
+
+General:
+	- pendulum
+	- remotely driven 2 link
+TSA
+	- pushing linear
+	- linear antagonist
+	- rotational joint 
+
+Underactuated
+	- cart pole
+	- reaction wheel pendulum
