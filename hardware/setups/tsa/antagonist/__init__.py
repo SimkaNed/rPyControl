@@ -4,7 +4,7 @@
 # put state in dictionary
 # add conversion from raw data to state
 # add sensor scales
-
+from ...actuators.gyems import GyemsDRC
 from time import perf_counter
 from math import pi
 
@@ -16,7 +16,7 @@ from math import pi
 #
 
 
-class TSA_Maxon:
+class Antagonist:
     """ This class provide interface to the Gyems BLDC motor driver over CAN socket"""
 
     def __init__(self, can_bus=None, device_id=0x01):
