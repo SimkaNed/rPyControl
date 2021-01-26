@@ -331,10 +331,14 @@ class GyemsDRC:
         self.parse_state(self.reply)
         # print(self.reply)
 
+
     def set_torque(self, torque, torque_limit=None):
         pass
 
+
     def set_speed(self, speed, accel_limit=None):
+        # TODO:
+        # implement accel limit_functions
         self.desired_speed = 100 * speed / self.speed_scale
         self.command = (
             self.protocol["set_speed"]
@@ -347,6 +351,7 @@ class GyemsDRC:
         # sending message goes here
 
     # TODO:
+
 
     def set_angle(self, angle, speed_limit=None):
         # TODO: Check scales
