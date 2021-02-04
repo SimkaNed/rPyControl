@@ -1,8 +1,8 @@
-from ...actuators.gyems import GyemsDRC
-from ...sensors.can_sensors.encoders import IncrementalEncoders
-from time import perf_counter
+from ....actuators.gyems import GyemsDRC
+from ....sensors.can_sensors.encoders import IncrementalEncoders
+from time import perf_counter, sleep
 from math import pi
-from multiprocessing import Process, Value
+from multiprocessing import Process, Value, Event
 from os import nice
 
 # TODO:
@@ -19,53 +19,217 @@ class Antagonist:
         self,
         motors_bus=None,
         sensors_bus=None,
-        motor_id={'left': 0x141, 'right': 0x142},
+        motor_id={1: 0x141, 2: 0x142},
         sensor_id=0x01,
     ):
+        # create object to store incremental encoders
+        self.encoders = IncrementalEncoders(can_bus=sensors_bus)
+        # reset the counter
+        self.encoders.reset_device()
+        # Set the encoder scales (counts -> mm)
+        self.encoder_scales = {1: -25.4 / (360.0 * 4), 2: 25.4 / (360.0 * 4)}
 
-        self.encoders = {'sensors': IncrementalEncoders(can_bus = sensors_bus)}
-        self.cpi = 360 
-        
+        self.sensors = {}
+
+        #
         self.actuators = {}
-        # self.actuators = 
+        self.actuators_labels = {1, 2}
+        #
         self.state = {}
-        
-        for actuator in ['left', 'right']:
+        self.state_labels = {"theta", "dtheta", "x", "dx", "current"}
+
+        for actuator in self.actuators_labels:
             self.actuators[actuator] = {
-                'motor': GyemsDRC(can_bus=motors_bus, device_id=motor_id[actuator]),
-                'limit': 500,
-                'angle_offset': 0,
-                'pos_offset': 0
+                "motor": GyemsDRC(can_bus=motors_bus, device_id=motor_id[actuator]),
+                # 'linear_sensor':
+                "limit": 2000,
+                "angle_offset": 0,
+                "pos_offset": 0,
             }
-            self.actuators[actuator]['motor'].set_rad()
-            self.actuators[actuator]['motor'].current_limit = self.actuators[actuator]['limit']
-            self.encoders[actuator]['counts'] = Value('d', 0)
-            self.state[actuator] = self.actuators[actuator]['motor'].state
-            self.state[actuator].update({'lin_pos':0, 'lin_vel':0})
+            self.actuators[actuator]["motor"].reset()
+            self.actuators[actuator]["motor"].set_radians()
+            self.actuators[actuator]["motor"].current_limit = self.actuators[actuator][
+                "limit"
+            ]
+            self.actuators[actuator]["control"] = Value("d", 0)
 
-        # TODO:
-        #   define and begin sensing process with shared variables for pos states
-        
+            # self.sensors[actuator] = self.actuators[actuator]['motor'].state
+            self.sensors[actuator] = {}
+            self.state[actuator] = {}
+            for state in self.state_labels:
+                self.sensors[actuator][state] = Value("d", 0)
+                self.state[actuator][state] = 0
 
-    def parse_state(self):
-        '''Parse the state'''
-        for actuator in {'left', 'right'}:
-            self.state[actuator] = self.actuators[actuator]['motor'].state
-            self.state[actuator].update({'lin_pos':Value('d',0), 'lin_vel':0})
-            
+        self.processes = []
+        self.exit_event = Event()
+        self.exit_event.clear()
 
-        # self.state = 0
-        # self.
-        # pass
+    def __del__(self):
 
-    def set_control(self):
-        pass
-    
-    def init_encoders(self):
-        pass
+        self.stop()
+        print("Antagonist was deleted from memory")
 
-    def init_actuator(self):
-        '''Initialization for one of the actuators'''
-        pass
+    def run(self):
+        self.processes.append(
+            Process(target=self.sensing_process, args=(self.exit_event,))
+        )
+        self.processes.append(
+            Process(target=self.motor_process, args=(self.exit_event,))
+        )
+        print("Processes are about to start...")
+        for process in self.processes:
+            process.start()
+
+        # print(self.exit_event.is_set())
+
+        if self.exit_event.is_set():
+            for process in self.processes:
+                process.join()
+
+        # TODO: print the processes that will start soon
+
+    def disable(self):
+        for actuator in self.actuators_labels:
+            self.actuators[actuator]["motor"].disable()
+
+    def stop(self):
+        print("Processes are about to stop...")
+        self.exit_event.set()
+        self.disable()
+        if self.processes:
+            for process in self.processes:
+                process.terminate()
+        print("Processes are terminated...")
+
+    def sensing_process(self, exit_event):
+        print("Sensing procces is launched")
+        while True:
+            try:
+                self.encoders.get_state()
+                for actuator in self.actuators_labels:
+                    self.sensors[actuator]["x"].value = (
+                        self.encoder_scales[actuator] * self.encoders.pos[actuator]
+                        - self.actuators[actuator]["pos_offset"]
+                    )
+                    self.sensors[actuator]["dx"].value = self.encoders.vel[actuator]
+            except KeyboardInterrupt:
+                exit_event.set()
+                print("Exit sensing process")
+
+    def motor_process(self, exit_event):
+        print("Motor procces is launched")
+        for actuator in self.actuators_labels:
+            self.actuators[actuator]["motor"].enable()
+        try:
+            t0 = perf_counter()
+            while True:
+                t = perf_counter() - t0
+                for actuator in self.actuators_labels:
+                    u = self.actuators[actuator]["control"].value
+                    self.actuators[actuator]["motor"].set_current(u)
+
+                    self.sensors[actuator]["theta"].value = (
+                        self.actuators[actuator]["motor"].state["angle"]
+                        - self.actuators[actuator]["angle_offset"]
+                    )
+                    self.sensors[actuator]["dtheta"].value = self.actuators[actuator][
+                        "motor"
+                    ].state["speed"]
+                    self.sensors[actuator]["current"].value = self.actuators[actuator][
+                        "motor"
+                    ].state["torque"]
+            # t2 = perf_counter()
+            # print((t2 - t)*1000)
+        except KeyboardInterrupt:
+            for actuator in self.actuators_labels:
+                self.actuators[actuator]["motor"].disable()
+                exit_event.set()
+                print("Exit motor process")
+            # except KeyboardInterrupt:
+            # self.__del__()
+
+    def get_state(self):
+        for actuator in self.actuators_labels:
+            for state in self.state_labels:
+                self.state[actuator][state] = self.sensors[actuator][state].value
+        return self.state
+
+    def set_control(self, control):
+        """Update the value for controller with argument"""
+        for actuator in self.actuators_labels:
+            self.actuators[actuator]["control"].value = control[actuator]
+
+    def init_setup(self):
+        print(f'\n {10*"*"} Initialization of encoders offsets... {10*"*"}\n')
+
+        for init_actuator in self.actuators_labels:
+            # sleep(0.5)
+            other_actuators = self.actuators_labels.difference({init_actuator})
+
+            for actuator in other_actuators:
+                self.actuators[actuator]["motor"].enable()
+                self.actuators[actuator]["motor"].set_current(30)
+            self.init_actuator(init_actuator)
+
+        for actuator in self.actuators_labels:
+            self.actuators[actuator]["motor"].set_current(0)
+            self.actuators[actuator]["motor"].disable()
+            # print(self)
+
+        print(f'\n {10*"*"} Initialization finished! {10*"*"}\n')
+
+    def init_actuator(self, actuator_label, speed=50, max_contraction=5, iters=2):
+        """Initialize zero of motor and linear encoder by reference motion"""
+
+        print(f"Initialization of actuator {actuator_label}...")
+
+        actuator = self.actuators[actuator_label]["motor"]
+
+        actuator.enable()
+
+        max_reached = False
+        pos, pos_incr, pos_offset, angle_offset = 0, 0, 0, 0
+        n_iter = 1
+
+        des_speed = -speed
+
+        self.encoders.get_state()
+        pos_0 = self.encoders.pos[actuator_label] * self.encoder_scales[actuator_label]
+
+        while n_iter <= iters:
+
+            actuator.set_speed(des_speed)
+            angle = actuator.state["angle"]
+
+            self.encoders.get_state()
+            pos_incr = (
+                self.encoders.pos[actuator_label] * self.encoder_scales[actuator_label]
+                - pos_0
+            )
+            pos = pos_incr - pos_offset
+
+            if not max_reached and pos > max_contraction:
+                des_speed = -des_speed
+                max_reached = True
+                n_iter += 1
+
+            # check either linear sensor data decreasing or not
+            if pos_offset > pos_incr:
+                pos_offset = pos_incr
+                angle_offset = angle
+
+                # actuator.set_zero()
+                # self.encoders.set_zero(encoders = {actuator_label})
+
+                max_reached = False
+
+        actuator.disable()
+
+        self.actuators[actuator_label]["angle_offset"] = angle_offset
+        self.actuators[actuator_label]["pos_offset"] = pos_offset + pos_0
+
+        print(f"Actuator {actuator_label} initialized...")
+
+        return pos_offset, angle_offset
 
     # def go_to():
