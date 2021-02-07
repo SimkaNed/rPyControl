@@ -9,11 +9,10 @@ from os import nice
 #   implement error handler - sudden jumps in control effort
 #   global ticker inside class, thread/process?
 #   make helper class with sensor related functions
-#   implement different mode in motor processes:
-#           for position, speed, torque controls 
-#  initialization trough the motor porcess
+#   make a two processes, one for motor another for sensors
 
-class LinearAntagonist:
+
+class GyemsSetup:
     """ This class provide interface to the Gyems BLDC motor driver over CAN socket"""
 
     def __init__(
@@ -170,16 +169,19 @@ class LinearAntagonist:
             # sleep(0.5)
             other_actuators = self.actuators_labels.difference({init_actuator})
 
-            self.init_actuator(init_actuator, other_actuators)
-        
-        # sleep(0.5)        
+            for actuator in other_actuators:
+                self.actuators[actuator]["motor"].enable()
+                self.actuators[actuator]["motor"].set_current(30)
+            self.init_actuator(init_actuator)
+
+        for actuator in self.actuators_labels:
+            self.actuators[actuator]["motor"].set_current(0)
+            self.actuators[actuator]["motor"].disable()
+            # print(self)
 
         print(f'\n {10*"*"} Initialization finished! {10*"*"}\n')
 
-
-    def init_actuator(self, actuator_label, other_actuators, speed=100, max_contraction=5, iters=2):
-        # TODO:
-        # DEBUG, MOVE TO THE MP
+    def init_actuator(self, actuator_label, speed=50, max_contraction=5, iters=2):
         """Initialize zero of motor and linear encoder by reference motion"""
 
         print(f"Initialization of actuator {actuator_label}...")
@@ -195,16 +197,11 @@ class LinearAntagonist:
 
         # reset counter for specific linear encoder
         self.encoders.set_zero(encoders = {actuator_label})
-        for tension_actuator in other_actuators:
-            self.actuators[tension_actuator]["motor"].enable()
+
         actuator.enable()
         
         while n_iter <= iters:
             actuator.set_speed(des_speed)
-            
-            for tension_actuator in other_actuators:
-                self.actuators[tension_actuator]["motor"].set_current(40)
-
             angle = actuator.state["angle"]
 
             self.encoders.get_state()
@@ -231,10 +228,6 @@ class LinearAntagonist:
 
         actuator.disable()
 
-        for tension_actuator in other_actuators:
-            # self.actuators[tension_actuator]["motor"].set_current(0)
-            self.actuators[tension_actuator]["motor"].disable()
-
         self.actuators[actuator_label]["angle_offset"] = angle_offset
         self.actuators[actuator_label]["pos_offset"] = pos_offset
 
@@ -242,3 +235,4 @@ class LinearAntagonist:
 
         return pos_offset, angle_offset
 
+    # def go_to():

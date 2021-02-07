@@ -1,14 +1,16 @@
-# TODO:
-# add rotation counter
-# add low pass filtering of the cuirrent and velocity
-# put state in dictionary
-# add conversion from raw data to state
-# add sensor scales
-# convert gains dict to array
-        
 
 from time import perf_counter
 from math import pi
+
+# TODO:
+# Run motor in several modes in processes:
+# i.e: speed, pos, current
+# Implement motor modes
+# motor.set_mode('s', 'p', 'c')
+# via motor.run(mode = 's')
+# provide interface to can_bus through tuple of functions
+#   tranciver
+#   reciver
 
 
 class GyemsDRC:
@@ -29,28 +31,31 @@ class GyemsDRC:
         # Check iether parsing from dict affect speed or not
         self.protocol = dict()
         self.protocol = {
-            "write_pid_ram": b"\x31",  # write PI gains for position, velocity and current loops in to RAM
-            "write_pid_rom": b"\x32",  # write PI gains for position, velocity and current loops in to ROM
+            # write PI gains for position, velocity and current loops in to RAM
+            "write_pid_ram": b"\x31",
+            # write PI gains for position, velocity and current loops in to ROM
+            "write_pid_rom": b"\x32",
             "read_accel_lim": b"\x33",  # read the value of the acceleration limit
             "write_accel_lim_ram": b"\x34",  # write accceleration limit to ram
             "read_encoder_data": b"\x90",  # read the encoder data
             "set_encoder_offset": b"\x91",  # set encoder offset to the specofoc value
-            "set_encoder_zero_rom": b"\x19",  # set the current position as zero for encoder and save it tp ROM
+            # set the current position as zero for encoder and save it tp ROM
+            "set_encoder_zero_rom": b"\x19",
             "read_multiturn_angle": b"\x92",  # read the encoder data as cumalitive angle
-            "read_single_angle": b"\x94", #
-            "read_motor_status_1": b"\x9A", #
-            "read_motor_status_2": b"\x9C", #
-            "read_motor_status_3": b"\x9D", #
-            "clear_error_flags": b"\x9B", #
-            "motor_off": b"\x80", #
-            "motor_stop": b"\x81", #
-            "motor_running": b"\x88", #
-            "set_torque": b"\xA1", #
-            "set_speed": b"\xA2", #
-            "set_pos_1": b"\xA3", #
-            "set_pos_2": b"\xA4", #
-            "set_pos_3": b"\xA5", #
-            "set_pos_4": b"\xA6", #  
+            "read_single_angle": b"\x94",  #
+            "read_motor_status_1": b"\x9A",  #
+            "read_motor_status_2": b"\x9C",  #
+            "read_motor_status_3": b"\x9D",  #
+            "clear_error_flags": b"\x9B",  #
+            "motor_off": b"\x80",  #
+            "motor_stop": b"\x81",  #
+            "motor_running": b"\x88",  #
+            "set_torque": b"\xA1",  #
+            "set_speed": b"\xA2",  #
+            "set_pos_1": b"\xA3",  #
+            "set_pos_2": b"\xA4",  #
+            "set_pos_3": b"\xA5",  #
+            "set_pos_4": b"\xA6",  #
         }
 
         self.command = self.protocol["motor_off"] + 7 * b"\x00"
@@ -71,6 +76,7 @@ class GyemsDRC:
         self.torque_constant = 1
         self.encoder_scale = 16384
 
+        self.command = 8 * b"\x00"
         # self.angle_scale = 2*pi/self.encoder_scale
         # self.encoder_grad_scale = 360/self.encoder_scale
         self.current_scale = 1
@@ -94,7 +100,8 @@ class GyemsDRC:
         self.torque = 0
         self.phases_current = {"A": 0, "B": 0, "C": 0}
 
-        self.raw_state_data = {"temp": 0, "encoder": 0, "speed": 0, "current": 0}
+        self.raw_state_data = {"temp": 0,
+                               "encoder": 0, "speed": 0, "current": 0}
 
         self.encoder_prev = 0
 
@@ -119,13 +126,19 @@ class GyemsDRC:
         self.transmiter(self.device_id, command)
 
     def recive_reply(self):
-        _, _, self.reply = self.reciver()
+        recived_id, _, reply = self.reciver()
+
+        if recived_id == self.device_id:
+            self.reply = reply
+
         return self.reply
 
-    def clear_errors(self):
-        command = self.protocol["clear_error_flags"] + 7 * b"\x00"
-        self.send_command(command)
+    def execute(self):
+        self.send_command(self.command)
         self.recive_reply()
+
+    def clear_errors(self):
+        self.command = self.protocol["clear_error_flags"] + 7 * b"\x00"
 
     def check_errors(self):
         pass
@@ -135,11 +148,11 @@ class GyemsDRC:
         if clear_errors:
             self.clear_errors()
 
-        command = (
+        self.command = (
             self.protocol["motor_stop"] + 7 * b"\x00"
         )  # message = {0x141:  b'\x81\x00\x00\x00\x00\x00\x00\x00'}
-        self.send_command(command)
-        self.recive_reply()
+        # self.send_command(command)
+        # self.recive_reply()
 
         # pass
 
@@ -147,24 +160,25 @@ class GyemsDRC:
         if clear_errors:
             self.clear_errors()
 
-        command = (
+        self.command = (
             self.protocol["motor_off"] + 7 * b"\x00"
         )  # message = {0x141:  b'\x81\x00\x00\x00\x00\x00\x00\x00'}
-        self.send_command(command)
-        self.recive_reply()
+        # self.send_command(command)
+        # self.recive_reply()
 
     def enable(self, clear_errors=False):
         if clear_errors:
             self.clear_errors()
 
-        command = (
+        self.command = (
             self.protocol["motor_running"] + 7 * b"\x00"
         )  # message = {0x141:  b'\x81\x00\x00\x00\x00\x00\x00\x00'}
-        self.send_command(command)
-        self.recive_reply()
+        # self.send_command(command)
+        # self.recive_reply()
 
     def reset(self, go_to_zero=False):
         self.disable(clear_errors=True)
+        self.execute()
         self.enable()
 
     def go_to_zero(self):
@@ -215,7 +229,8 @@ class GyemsDRC:
     # Parsing from the CAN frames
     def parse_state(self, reply):
         """parse the motor state from CAN frame"""
-        self.parse_sensor_data(reply)  # parse the raw data to self.raw_state_data
+        self.parse_sensor_data(
+            reply)  # parse the raw data to self.raw_state_data
         # state_labels = ['temp', 'angle', 'speed', 'torque', 'current']
 
         # some function to handle encoder
@@ -225,9 +240,12 @@ class GyemsDRC:
         )
         self.state["temp"] = self.temp_scale * self.raw_state_data["temp"]
         self.state["speed"] = self.speed_scale * self.raw_state_data["speed"]
-        self.state["current"] = self.current_scale * self.raw_state_data["current"]
+        self.state["current"] = self.current_scale * \
+            self.raw_state_data["current"]
         self.state["torque"] = self.torque_constant * self.state["current"]
         return self.state
+
+    # def
 
     def check_angle(self, reply):
         t = perf_counter()
@@ -258,7 +276,7 @@ class GyemsDRC:
 
     def set_pid(self, gains, persistant=False):
 
-        command = self.protocol["write_pid_ram"] + b"\x00"
+        self.command = self.protocol["write_pid_ram"] + b"\x00"
         memory_type = "RAM"
 
         if persistant:
@@ -266,7 +284,7 @@ class GyemsDRC:
             user_input = input()
             memory_type = "ROM"
             if user_input == "Y" or user_input == "y":
-                command = self.protocol["write_pid_rom"] + b"\x00"
+                self.command = self.protocol["write_pid_rom"] + b"\x00"
             else:
                 print("Canceling, gains will be written to RAM")
 
@@ -275,15 +293,16 @@ class GyemsDRC:
 
         gains = [40, 40, 35, 15, 40, 40]
         for gain in gains:
-            command += self.to_bytes(1, gain, signed=False)
+            self.command += self.to_bytes(1, gain, signed=False)
 
-        self.send_command(command)
-        self.recive_reply()
+        # self.send_command(command)
+        # self.recive_reply()
+        self.execute()
         print(f"New gains are written to {memory_type}")
 
     def set_zero(self, persistant=False):
         """ Set a current position as a zero of encoder"""
-        command = self.protocol["set_encoder_offset"] + 7 * b"\x00"
+        self.command = self.protocol["set_encoder_offset"] + 7 * b"\x00"
         memory_type = "RAM"
 
         if persistant:
@@ -291,13 +310,15 @@ class GyemsDRC:
             user_input = input()
             memory_type = "ROM"
             if user_input == "Y" or user_input == "y":
-                command = self.protocol["set_encoder_zero_rom"] + 7 * b"\x00"
+                self.command = self.protocol["set_encoder_zero_rom"] + 7 * b"\x00"
             else:
                 print("Canceling, zero will be written to RAM")
-
-        self.send_command(command)
-        self.recive_reply()
-
+            self.execute()
+            # self.send_command(command)
+            # self.recive_reply()
+        else:
+            self.motor_turns = 0
+            self.state["angle"] = 0
 
     # ///////////////////////////
     # ///// Control Modes ///////
@@ -326,15 +347,14 @@ class GyemsDRC:
             + self.to_bytes(2, self.desired_current)
             + 2 * b"\x00"
         )
-        self.send_command(self.command)
-        self.recive_reply()
-        self.parse_state(self.reply)
-        # print(self.reply)
+        # self.send_command(self.command)
+        # self.recive_reply()
 
+        # self.parse_state(self.reply)
+        # print(self.reply)
 
     def set_torque(self, torque, torque_limit=None):
         pass
-
 
     def set_speed(self, speed, accel_limit=None):
         # TODO:
@@ -345,13 +365,18 @@ class GyemsDRC:
             + 3 * b"\x00"
             + self.to_bytes(4, self.desired_speed)
         )
-        self.send_command(self.command)
-        self.recive_reply()
-        self.parse_state(self.reply)
+
+        # self.send_command(self.command)
+        # self.recive_reply()
+        # self.parse_state(self.reply)
         # sending message goes here
+    # d
+
+    def update_state(self):
+        self.parse_state(self.reply)
+        # return
 
     # TODO:
-
 
     def set_angle(self, angle, speed_limit=None):
         # TODO: Check scales
@@ -373,20 +398,22 @@ class GyemsDRC:
                 + self.to_bytes(4, self.desired_angle)
             )
 
-        self.send_command(self.command)
-        self.recive_reply()
-        self.parse_state(self.reply)
+        # self.send_command(self.command)
+        # self.recive_reply()
+        # self.parse_state(self.reply)
         # sending message goes here
-
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # \\\\\\\\\\\ FUNCTIONS TO IMPLEMENT \\\\\\\\\\\\\\
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-
     # Measurements
     def get_state(self):
-        pass
+        self.command = self.protocol["set_pos_1"] + 3 * \
+            b"\x00" + self.to_bytes(4, self.desired_angle)
+        self.execute()
+
+        # pass
 
     def get_vel(self):
         pass
@@ -398,4 +425,4 @@ class GyemsDRC:
         pass
 
     def get_phases_current(self):
-        pass
+        # pass

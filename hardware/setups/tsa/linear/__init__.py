@@ -9,6 +9,23 @@ from os import nice
 #   implement error handler - sudden jumps in control effort
 #   global ticker inside class, thread/process?
 #   make helper class with sensor related functions
+#   make a two processes, one for motor another for sensors
+
+# class GyemsSetup:
+
+# class EsconSetup:
+
+from ....actuators.gyems import GyemsDRC
+from ....sensors.can_sensors.encoders import IncrementalEncoders
+from time import perf_counter, sleep
+from math import pi
+from multiprocessing import Process, Value, Event
+from os import nice
+
+# TODO:
+#   implement error handler - sudden jumps in control effort
+#   global ticker inside class, thread/process?
+#   make helper class with sensor related functions
 #   implement different mode in motor processes:
 #           for position, speed, torque controls 
 #  initialization trough the motor porcess
