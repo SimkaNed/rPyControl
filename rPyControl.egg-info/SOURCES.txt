@@ -1,0 +1,11 @@
+LICENSE
+MANIFEST.in
+README.md
+setup.py
+rPyControl/__init__.py
+rPyControl.egg-info/PKG-INFO
+rPyControl.egg-info/SOURCES.txt
+rPyControl.egg-info/dependency_links.txt
+rPyControl.egg-info/top_level.txt
+rPyControl/network/__init__.py
+rPyControl/trajectory/__init__.py
