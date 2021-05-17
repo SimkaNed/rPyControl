@@ -1,7 +1,7 @@
 import socket
 import struct
 import os
-import spidev
+# import spidev
 from multiprocessing import Process, Value, Array, Lock
 from time import perf_counter
 # TODO:
@@ -17,7 +17,7 @@ from time import perf_counter
 
 
 class CANSocket:
-    def __init__(self, interface='can0', devices_id=[0x001], serial_port=None, device=None, bitrate=1000000):
+    def __init__(self, interface='can0', devices_id=[0x001], serial_port=None, device=None, bitrate=1000000, reset = True):
 
         self.frame_format = "=IB3x8s"
         self.frame = 0
@@ -26,12 +26,13 @@ class CANSocket:
         self.devices_reply = dict()
         # self.messages = dict()
         self.id = devices_id
+        if reset:
+            self.can_down()
+            self.can_set()
+            self.can_up()
 
-        self.can_down()
-        self.can_set()
         if serial_port or device == 'can_hacker':
             self.can_hacker_init(port=serial_port, baud_rate=115200)
-        self.can_up()
 
         self.socket = socket.socket(
             socket.AF_CAN, socket.SOCK_RAW, socket.CAN_RAW)

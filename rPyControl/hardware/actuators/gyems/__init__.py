@@ -157,6 +157,7 @@ class GyemsDRC(CANDevice):
 
     def reset(self, go_to_zero=False):
         self.disable(clear_errors=True)
+        # print('test')
         self.execute()
         self.enable()
 

@@ -22,8 +22,8 @@ class Pendulum:
                          "angle_offset": 0,
                          "pos_offset": 0,
                          }
-
         self.actuator["motor"].reset()
+        # print('test')
         self.actuator["motor"].set_radians()
         self.actuator["motor"].current_limit = self.actuator["limit"]
         self.actuator["control"] = Value("d", 0)
